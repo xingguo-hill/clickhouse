@@ -16,7 +16,7 @@ func (client *ClientDao) GenImportID(tableName string, id *uint32, kind string, 
 	//生成自增id
 	sInsertQuery := `INSERT INTO ` + tableName + ` (id, kind, val)
 	 SELECT COALESCE(MAX(id), 0) + 1, '` + kind + `', '` + val + `' FROM ` + tableName + `;`
-	if err := client.SingleCRDSql(sInsertQuery, []any{}); err != nil {
+	if err := client.SingleTransaction(sInsertQuery, []any{}); err != nil {
 		return err
 	}
 	//获取自增id信息
@@ -24,7 +24,7 @@ func (client *ClientDao) GenImportID(tableName string, id *uint32, kind string, 
 		ID uint32 `db:"id"`
 	}
 	idR := []idGenRecord{}
-	err := client.SelectSql(&idR, "SELECT id FROM "+tableName+" where kind=? and val=? ORDER BY id DESC LIMIT 1", []any{kind, val})
+	err := client.SingleSelect(&idR, "SELECT id FROM "+tableName+" where kind=? and val=? ORDER BY id DESC LIMIT 1", []any{kind, val})
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (client *ClientDao) CheckTotalByImportId(tableName string, sourceTotal uint
 	}
 	flag := false
 	var t []total
-	err := client.SelectSql(&t, "select count(1) as total from "+tableName+" where source_id=?", []any{importId})
+	err := client.SingleSelect(&t, "select count(1) as total from "+tableName+" where source_id=?", []any{importId})
 	if err != nil {
 		return 0, flag
 	}
@@ -57,11 +57,12 @@ func (client *ClientDao) CheckTotalByImportId(tableName string, sourceTotal uint
 }
 
 /**
- * @description: 更新导入记录表结果
- * @param {string} tableName
- * @param {uint32} sourceTotal
- * @param {uint32} intotal
- * @return sql.Result, error
+* @description: 更新导入记录表结果
+* @param {string} tableName
+* @param {uint32} id
+* @param {uint32} sourceTotal
+* @param {uint32} intotal
+* @return  error
  */
 func (client *ClientDao) UpdateImportStausByImportId(tableName string, id uint32, sourceTotal uint32, intotal uint32) error {
 	var suss uint8
@@ -70,6 +71,6 @@ func (client *ClientDao) UpdateImportStausByImportId(tableName string, id uint32
 	} else {
 		suss = 2
 	}
-	return client.SingleCRDSql("alter table "+tableName+" update from_count=?,in_count=?,suss=? where id=?",
+	return client.SingleTransaction("alter table "+tableName+" update from_count=?,in_count=?,suss=? where id=?",
 		[]any{sourceTotal, intotal, suss, id})
 }

@@ -21,12 +21,12 @@ func NewClient(dsn string) *ClientDao {
 }
 
 /**
- * @description: 单条记录操作增删改操作
- * @param {string} sInsertQuery
+ * @description: 单条记录操作增删改事务操作
+ * @param {string} sSql
  * @param {[]any} param
- * @return {*}
+ * @return error
  */
-func (client *ClientDao) SingleCRDSql(sSql string, param []any) error {
+func (client *ClientDao) SingleTransaction(sSql string, param []any) error {
 	//数据预处理写入
 	tx := client.db.MustBegin()
 	stmt, err := tx.Prepare(sSql)
@@ -43,21 +43,21 @@ func (client *ClientDao) SingleCRDSql(sSql string, param []any) error {
 
 /**
  * @description: 查询语句
- * @param {any} res 结构体切片
- * @param {string} sSelect
- * @param {[]any} param
+ * @param {any} res 返回结果集结构体切片
+ * @param {string} sSelect 查询语句
+ * @param {[]any} params
  * @return error
  */
-func (client *ClientDao) SelectSql(res any, sSelect string, param []any) error {
-	return client.db.Select(res, sSelect, param...)
+func (client *ClientDao) SingleSelect(res any, sSelect string, params []any) error {
+	return client.db.Select(res, sSelect, params...)
 }
 
 /**
  * @description: 批量插入结构体数组
  * @param {string} tableName
  * @param {[]string} feilds
- * @param {*[]any} alogs
- * @return {*}
+ * @param {*[]any} datas
+ * @return error
  */
 func (client *ClientDao) BatchInsert(tableName string, feilds []string, datas *[]any) error {
 	//数据预处理写入
@@ -105,7 +105,7 @@ func generateBatchSQLHead(tableName string, feilds []string) string {
 }
 
 /**
- * @description: 关联clickhouse 链接
+ * @description: 关闭clickhouse链接
  * @return error
  */
 func (client *ClientDao) Close() error {
