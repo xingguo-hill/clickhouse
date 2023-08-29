@@ -2,25 +2,18 @@ package clickhouse
 
 import (
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 
-	"github.com/ClickHouse/clickhouse-go"
+	_ "github.com/ClickHouse/clickhouse-go"
 	"github.com/jmoiron/sqlx"
 )
 
-type Total struct {
-	Total int `db:"total"`
-}
 type ClientDao struct {
 	db *sqlx.DB
 }
 
-func NewClient(dsn string, debug bool) *ClientDao {
-	if debug == false {
-		setDebug()
-	}
+func NewClient(dsn string) *ClientDao {
 	db := sqlx.MustConnect("clickhouse", dsn)
 	return &ClientDao{
 		db: db,
@@ -28,25 +21,45 @@ func NewClient(dsn string, debug bool) *ClientDao {
 }
 
 /**
- * @description: 设置数据库操作输出调试日志
- * @return
+ * @description: 单条记录操作增删改操作
+ * @param {string} sInsertQuery
+ * @param {[]any} param
+ * @return {*}
  */
-func setDebug() {
-	sqlfile, err := os.OpenFile("/dev/null", os.O_RDWR|os.O_APPEND, 0755)
+func (client *ClientDao) SingleCRDSql(sSql string, param []any) error {
+	//数据预处理写入
+	tx := client.db.MustBegin()
+	stmt, err := tx.Prepare(sSql)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	clickhouse.SetLogOutput(sqlfile)
+	defer stmt.Close()
+	_, err = stmt.Exec(param...)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 /**
- * @description:批量插入结构体数组
- * @param {*sqlx.DB} db
- * @param {string} tableName
- * @param {*[]any} alog
+ * @description: 查询语句
+ * @param {any} res 结构体切片
+ * @param {string} sSelect
+ * @param {[]any} param
  * @return error
  */
-func (client *ClientDao) BatchInserLog(tableName string, feilds []string, alogs *[]any) error {
+func (client *ClientDao) SelectSql(res any, sSelect string, param []any) error {
+	return client.db.Select(res, sSelect, param...)
+}
+
+/**
+ * @description: 批量插入结构体数组
+ * @param {string} tableName
+ * @param {[]string} feilds
+ * @param {*[]any} alogs
+ * @return {*}
+ */
+func (client *ClientDao) BatchInsert(tableName string, feilds []string, datas *[]any) error {
 	//数据预处理写入
 	sInsertQuery := generateBatchSQLHead(tableName, feilds)
 	tx := client.db.MustBegin()
@@ -56,11 +69,11 @@ func (client *ClientDao) BatchInserLog(tableName string, feilds []string, alogs 
 		return err
 	}
 	defer stmt.Close()
-	for _, record := range *alogs {
+	for _, record := range *datas {
 		var params []any
 		v := reflect.ValueOf(record)
 		if v.Kind() != reflect.Struct {
-			panic("BatchInserLog must struct slice")
+			panic("BatchInser data must struct slice")
 		}
 		for i := 0; i < v.NumField(); i++ {
 			params = append(params, v.Field(i).Interface())
@@ -71,17 +84,13 @@ func (client *ClientDao) BatchInserLog(tableName string, feilds []string, alogs 
 		}
 		params = nil
 	}
-	err = tx.Commit()
-	if err != nil {
-		tx.Rollback()
-	}
-	return err
+	return tx.Commit()
 }
 
 /**
  * @description: 生成批处理的 SQL 语句前缀
- * @param {*[]any} data
  * @param {string} tableName
+ * @param {[]string} feilds
  * @return string
  */
 func generateBatchSQLHead(tableName string, feilds []string) string {
@@ -93,22 +102,6 @@ func generateBatchSQLHead(tableName string, feilds []string) string {
 	}
 	sql := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, tableName, strings.Join(rowNames, ","), strings.Join(valuesPattern, ","))
 	return sql
-}
-
-/**
- * @description:统计一次导入的总数
- * @param {*sqlx.DB} db
- * @param {*} tableName
- * @param {string} sourceFile
- * @return int,error
- */
-func (client *ClientDao) GetTableTotalBySourceFile(tableName, sourceFile string) (int, error) {
-	sql := fmt.Sprintf("select count(1) as total from %s where source_file='%s';", tableName, sourceFile)
-	var t []Total
-	if err := client.db.Select(&t, sql); err != nil {
-		return 0, err
-	}
-	return t[0].Total, nil
 }
 
 /**
