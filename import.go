@@ -3,74 +3,65 @@
  */
 package clickhouse
 
+import "reflect"
+
+type RecordTable struct {
+	ID        uint32 `db:"id"`
+	Kind      string `db:"kind"`
+	Val       string `db:"val"`
+	FromCount uint32 `db:"from_count"`
+	InCount   uint32 `db:"http_x_forwarded_for"`
+	Suss      uint8  `db:"suss"`
+	Stime     string `db:"stime"`
+	Etime     string `db:"etime"`
+}
+
+func getImportRecordTable() []string {
+	return []string{
+		"id",
+		"kind",
+		"val",
+		"from_count",
+		"in_count",
+		"suss",
+		"etime",
+		"ctime",
+	}
+}
+
 /**
- * @description:从导入记录表生成最新的Id
+ * @description: 从导入记录表生成最新的Id
  * @param {string} tableName
- * @param {*uint32} id
- * @param {string} kind
- * @param {string} val
+ * @param {RecordTable} s
  * @return error
  */
-func (client *ClientDao) GenImportID(tableName string, id *uint32, kind string, val string) error {
-
-	//生成自增id
-	sInsertQuery := `INSERT INTO ` + tableName + ` (id, kind, val)
-	 SELECT COALESCE(MAX(id), 0) + 1, '` + kind + `', '` + val + `' FROM ` + tableName + `;`
-	if err := client.SingleTransaction(sInsertQuery, []any{}); err != nil {
-		return err
+func (client *ClientDao) InsertImportRecord(tableName string, s RecordTable) error {
+	var params []any
+	v := reflect.ValueOf(s)
+	if v.Kind() != reflect.Struct {
+		panic("BatchInser data must struct slice")
 	}
-	//获取自增id信息
-	type idGenRecord struct {
-		ID uint32 `db:"id"`
+	for i := 0; i < v.NumField(); i++ {
+		params = append(params, v.Field(i).Interface())
 	}
-	idR := []idGenRecord{}
-	err := client.SingleSelect(&idR, "SELECT id FROM "+tableName+" where kind=? and val=? ORDER BY id DESC LIMIT 1", []any{kind, val})
-	if err != nil {
-		return err
-	}
-	*id = idR[0].ID
-	return nil
+	sInsertQuery := generateBatchSQLHead(tableName, getImportRecordTable())
+	return client.SingleTransaction(sInsertQuery, params)
 }
 
 /**
  * @description: 统计一次导入的总数
  * @param {string} tableName
- * @param {uint32} sourceTotal
- * @param {uint32} importId
- * @return uint32, bool 返回当前操作导入数据库记录数，以及原数据与导入数据的比对结果
+ * @param {uint32} sourceId
+ * @return uint32, error 返回当前操作导入数据库记录数，以及原数据与导入数据的比对结果
  */
-func (client *ClientDao) CheckTotalByImportId(tableName string, sourceTotal uint32, importId uint32) (uint32, bool) {
+func (client *ClientDao) GetTotalByImportId(tableName string, sourceId uint32) (uint32, error) {
 	type total struct {
 		Total uint32 `db:"total"`
 	}
-	flag := false
 	var t []total
-	err := client.SingleSelect(&t, "select count(1) as total from "+tableName+" where source_id=?", []any{importId})
+	err := client.SingleSelect(&t, "select count(1) as total from "+tableName+" where source_id=?", []any{sourceId})
 	if err != nil {
-		return 0, flag
+		return 0, err
 	}
-	intotal := t[0].Total
-	if sourceTotal == intotal {
-		flag = true
-	}
-	return intotal, flag
-}
-
-/**
-* @description: 更新导入记录表结果
-* @param {string} tableName
-* @param {uint32} id
-* @param {uint32} sourceTotal
-* @param {uint32} intotal
-* @return  error
- */
-func (client *ClientDao) UpdateImportStausByImportId(tableName string, id uint32, sourceTotal uint32, intotal uint32) error {
-	var suss uint8
-	if sourceTotal == intotal {
-		suss = 1
-	} else {
-		suss = 2
-	}
-	return client.SingleTransaction("alter table "+tableName+" update from_count=?,in_count=?,suss=? where id=?",
-		[]any{sourceTotal, intotal, suss, id})
+	return t[0].Total, nil
 }
