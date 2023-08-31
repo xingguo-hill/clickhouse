@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS check_import_record(
     `from_count` UInt32, -- 源文件记录数
     `in_count` UInt32, -- 导入记录数
     `suss` UInt8 DEFAULT 0, -- 0待比对 1 成功导入，2导入失败
-    `ctime` DateTime DEFAULT now(), -- 创建时间
+    `stime` DateTime DEFAULT now(), -- 导入开始时间
     `etime` DateTime -- 导入完成时间
 )ENGINE = ReplacingMergeTree
 ORDER BY id;

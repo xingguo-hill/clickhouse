@@ -5,30 +5,6 @@ package clickhouse
 
 import "reflect"
 
-type RecordTable struct {
-	ID        uint32 `db:"id"`
-	Kind      string `db:"kind"`
-	Val       string `db:"val"`
-	FromCount uint32 `db:"from_count"`
-	InCount   uint32 `db:"http_x_forwarded_for"`
-	Suss      uint8  `db:"suss"`
-	Stime     string `db:"stime"`
-	Etime     string `db:"etime"`
-}
-
-func getImportRecordTable() []string {
-	return []string{
-		"id",
-		"kind",
-		"val",
-		"from_count",
-		"in_count",
-		"suss",
-		"etime",
-		"ctime",
-	}
-}
-
 /**
  * @description: 从导入记录表生成最新的Id
  * @param {string} tableName
